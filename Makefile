@@ -16,7 +16,8 @@ default: build
 clean:
 	@echo -e $(PREFIX) $@ $(SUFFIX)
 	cd $(CURRENT_DIR); \
-		(podman rmi $(IMAGE_REPO):$(IMAGE_TAG) || true)
+		(podman rmi $(IMAGE_REPO):$(IMAGE_TAG) || true);
+		rm -rf target/
 
 .PHONY: build
 build: clean
