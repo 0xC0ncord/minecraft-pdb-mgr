@@ -6,11 +6,13 @@ use kube::{
     Client,
     api::{Api, Patch, PatchParams},
 };
+use percentage::Percentage;
 use signal_hook::consts::signal::{SIGINT, SIGTERM};
 use signal_hook_tokio::Signals;
 use std::sync::Arc;
 
 const DEFAULT_UPDATE_INTERVAL_SECONDS: u64 = 10;
+const DEFAULT_MIN_PLAYERS: u32 = 1;
 
 #[tokio::main]
 async fn main() {
@@ -36,11 +38,11 @@ async fn handle_signals(shutdown_notify: Arc<tokio::sync::Notify>) {
     }
 }
 
-async fn get_server_player_count(host: &str, port: u16) -> Result<u32> {
+async fn get_server_player_info(host: &str, port: u16) -> Result<(u32, u32)> {
     match mc_query::status::status_with_timeout(host, port, std::time::Duration::from_secs(10))
         .await
     {
-        Ok(s) => Ok(s.players.online),
+        Ok(s) => Ok((s.players.online, s.players.max)),
         Err(e) => Err(e.into()),
     }
 }
@@ -48,23 +50,38 @@ async fn get_server_player_count(host: &str, port: u16) -> Result<u32> {
 async fn try_update_pdb(
     api: &Api<PodDisruptionBudget>,
     pdb_name: &str,
+    min_players: &u32,
+    min_players_pct: &f64,
     server_host: &str,
     server_port: &u16,
     last_has_players: &mut bool,
 ) -> Result<()> {
-    let has_players = match get_server_player_count(server_host, *server_port).await {
-        Ok(i) => i > 0,
-        Err(e) => {
-            return Err(anyhow!("Failed to get server player count: {e}"));
-        }
+    let (players_online, players_max): (u32, u32) =
+        match get_server_player_info(server_host, *server_port).await {
+            Ok((online, max)) => (online, max),
+            Err(e) => {
+                return Err(anyhow!("Failed to get server player count: {e}"));
+            }
+        };
+    let (players_needed, need_msg): (f64, String) = if *min_players_pct > 0.0 {
+        let req: f64 = Percentage::from_decimal(*min_players_pct).apply_to(players_max.into());
+        (
+            req,
+            format!("{:.0}% [{}]", *min_players_pct * 100.0, req as i32),
+        )
+    } else {
+        (f64::from(*min_players), format!("{min_players}"))
     };
+    let has_players = f64::from(players_online) >= players_needed;
+
+    log::debug!(
+        "Condition {}: {players_online}/{players_max} players (need {need_msg}).",
+        if has_players { "met" } else { "unmet" }
+    );
+
     if has_players == *last_has_players {
         log::debug!("Server player state unchanged - skipping this update.");
         return Ok(());
-    } else if has_players {
-        log::debug!("Server player state changed - one or more players connected.");
-    } else {
-        log::debug!("Server player state changed - no players connected.");
     }
 
     // Construct the patch.
@@ -98,11 +115,32 @@ async fn run() -> Result<()> {
     let pod_namespace: String = std::env::var("POD_NAMESPACE")
         .context("Could not determine pod namespace from POD_NAMESPACE!")?;
     let pdb_name: String = std::env::var("PDB_NAME").context("No PDB_NAME specified!")?;
+    let min_players: u32 = match std::env::var("MIN_PLAYERS") {
+        Ok(s) => s.parse().context("MIN_PLAYERS conversion to u32 failed!")?,
+        Err(_) => DEFAULT_MIN_PLAYERS,
+    };
+    let min_players_pct: f64 = match std::env::var("MIN_PLAYERS_PERCENT") {
+        Ok(s) => s
+            .parse()
+            .context("MIN_PLAYERS_PERCENT conversion to f64 failed!")?,
+        Err(_) => 0.0,
+    };
     let server_host: String = std::env::var("SERVER_HOST").context("No SERVER_HOST specified!")?;
     let server_port: u16 = std::env::var("SERVER_PORT")
         .context("No SERVER_PORT specified!")?
         .parse()
         .context("SERVER_PORT conversion to u16 failed!")?;
+
+    if std::env::var("RUST_LOG")?.to_lowercase() == "debug" {
+        if min_players_pct > 0.0 {
+            log::debug!(
+                "Will watch for minimum {:.0}% of players.",
+                min_players_pct * 100.0
+            );
+        } else {
+            log::debug!("Will watch for minimum {min_players} players.");
+        }
+    }
 
     // Set up required Kube client.
     let client = Client::try_default().await?;
@@ -128,6 +166,8 @@ async fn run() -> Result<()> {
         if let Err(e) = try_update_pdb(
             &api,
             &pdb_name,
+            &min_players,
+            &min_players_pct,
             &server_host,
             &server_port,
             &mut last_has_players,
