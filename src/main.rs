@@ -149,17 +149,18 @@ async fn run() -> Result<()> {
     let pdb = api.get(&pdb_name).await;
 
     // Save its current state if possible.
-    let mut last_has_players: bool = match pdb {
-        Ok(v) => match v.spec.unwrap().max_unavailable {
-            Some(IntOrString::Int(i)) => i == 0,
-            Some(IntOrString::String(_)) => false,
-            None => false,
-        },
-        Err(e) => {
+    let mut last_has_players: bool = pdb.map_or_else(
+        |e| {
             log::warn!("{e}");
             false
-        }
-    };
+        },
+        |v| {
+            matches!(
+                v.spec.as_ref().and_then(|s| s.max_unavailable.as_ref()),
+                Some(IntOrString::Int(0))
+            )
+        },
+    );
 
     // Wrap the update method in an error printer.
     let mut do_update = async || {
