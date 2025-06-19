@@ -16,6 +16,11 @@ the following environment variables:
 update. You need to create this PDB yourself.
 - `SERVER_HOST` - the hostname or IP address of the Minecraft server to monitor.
 - `SERVER_PORT` - the port of the Minecraft server to monitor.
+- `MIN_PLAYERS` - the minimum number of online players to consider when updating
+the PDB. Default is 1.
+- `MIN_PLAYERS_PERCENT` - a floating point value (`0.0` - `1.0`) representing
+the percent of online players to the maximum number of players to consider when
+updating the PDB. This takes precedence over `MIN_PLAYERS`.
 
 # License
 
