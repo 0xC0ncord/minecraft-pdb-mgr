@@ -1,4 +1,4 @@
-FROM alpine:latest AS builder
+FROM alpine:latest@sha256:8a1f59ffb675680d47db6337b49d22281a139e9d709335b492be023728e11715 AS builder
 COPY --chmod=0755 . /minecraft-pdb-mgr
 RUN apk upgrade && \
     apk add curl clang lld && \
