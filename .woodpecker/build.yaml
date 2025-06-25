@@ -8,7 +8,7 @@ steps:
   - when:
       - event: pull_request
     name: build container
-    image: plugins/kaniko
+    image: plugins/kaniko@sha256:7c4263578f972bda45303dae99debf4bb4dfc550cf758658a62c73ea91da68f1
     settings:
       dry-run: true
       dockerfile: Containerfile
@@ -16,7 +16,7 @@ steps:
   - when:
       - evaluate: 'CI_COMMIT_BRANCH == CI_REPO_DEFAULT_BRANCH'
     name: build and publish container
-    image: plugins/kaniko
+    image: plugins/kaniko@sha256:7c4263578f972bda45303dae99debf4bb4dfc550cf758658a62c73ea91da68f1
     settings:
       registry: https://registry.fuwafuwatime.moe
       repo: registry.fuwafuwatime.moe/concord/minecraft-pdb-mgr
