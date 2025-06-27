@@ -7,7 +7,7 @@ SUFFIX = "$(NO_COLOR)"
 
 CURRENT_DIR = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-IMAGE_REPO			= registry.fuwafuwatime.moe/concord/minecraft-pdb-mgr
+IMAGE_REPO			= registry.fuwafuwatime.moe/fuwafuwalabs/minecraft-pdb-mgr
 IMAGE_TAG 			= latest
 
 default: build
